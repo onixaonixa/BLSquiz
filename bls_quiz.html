@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BLS（一次救命処置）クイズ</title>
+  
+  <!-- React と ReactDOM の読み込み -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  
+  <!-- Tailwind CSS の読み込み -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Babel の読み込み -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  
+  <style>
+    body {
+      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+      background-color: #f5f5f5;
+    }
+    .card {
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      border-radius: 0.5rem;
+      background-color: white;
+    }
+    .alert-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 50;
+    }
+    .alert-content {
+      background-color: white;
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      max-width: 90%;
+      width: 28rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    
+    // BLSクイズアプリ
+    const BLSQuizApp = () => {
+      // アプリの状態
+      const [currentScreen, setCurrentScreen] = useState('start');
+      const [userName, setUserName] = useState('');
+      const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+      const [score, setScore] = useState(0);
+      const [answers, setAnswers] = useState([]);
+      const [allResults, setAllResults] = useState([]);
+      const [showAlert, setShowAlert] = useState(false);
+      const [alertMessage, setAlertMessage] = useState({ title: '', message: '' });
+
+      // クイズの問題データ
+      const quizData = [
+        {
+          question: '反応がない患者さんを見つけた時、最初にすることは何でしょうか？',
+          options: [
+            '呼吸をしているか確認する',
+            '大声で応援の人を呼ぶ',
+            '胸骨圧迫を始める'
+          ],
+          correctAnswer: 1,
+          explanation: '重症の可能性がある人を一人で対応するのは無理です。まずは応援を呼びましょう。「誰か来てください！人が倒れています！」など具体的に大声で呼びます。応援を呼ぶ時には「AEDと救急カートを持ってきてください！」と具体的に指示しましょう。'
+        },
+        {
+          question: '呼吸の確認をしましたが、正常な呼吸なのか自信がない、正直よくわからないとき、どうしたらいいでしょうか？',
+          options: [
+            'ちゃんとわかるまで根気よく観察を続ける',
+            '諦めてとりあえず正常な呼吸はしていないことにする',
+            'わかりそうな人を呼んでくる'
+          ],
+          correctAnswer: 1,
+          explanation: '本当に呼吸が止まっている場合、心臓が止まっている可能性もあります。心臓が止まっている人には1秒でも早く胸骨圧迫をしなければいけません。また、重症の患者さんがいる時に持ち場を離れて患者さんを一人にするのも基本的にはダメです。'
+        },
+        {
+          question: '胸骨圧迫を行う際の手の正しい位置はどれですか？',
+          options: [
+            '手のひら全体を胸骨に密着させる',
+            '指先を胸骨に当てる',
+            '手の付け根の部分のみを胸骨の下半分に置く',
+            '両手を平らに広げて胸全体を押す'
+          ],
+          correctAnswer: 2,
+          explanation: '正しい胸骨圧迫では、手の付け根の部分（手掌基部）のみを胸骨の下半分に置きます。これにより圧力が効果的に心臓に伝わります。指が胸に触れないようにすることで、肋骨骨折などの合併症を防ぎます。肘をまっすぐ伸ばして垂直に押し、体全体を使って自分の体重を乗せるように押します。'
+        },
+        {
+          question: '胸骨圧迫のスピードは1分間に100から120回ですが、このテンポと同じ曲はどれでしょうか？（複数選択可）',
+          options: [
+            'アンパンマンマーチ（♪そうだ～）',
+            'ドラえもんのうた（♪こんなこと～）',
+            'ウサギとカメ（♪もしもしかめよ～）',
+            '「夜に駆ける」（YOASOBI）（♪しずんだりとけたり～）'
+          ],
+          correctAnswer: [1, 2],
+          explanation: '胸骨圧迫の時の歌としてはアンパンマンマーチが有名ですが、アンパンマンマーチは正確にはBPM 96なので100未満です。「夜に駆ける」はテンポが（130回/分）なのでリコイル（心臓が再拡張する）が不十分になるかもです。日頃から親しんでいる曲のテンポを覚えておくと役立ちます。'
+        },
+        {
+          question: '胸骨圧迫とバックバルブマスクの換気は30：２で2回おこなうとなっていますが、明らかに失敗して換気できませんでした。どうしたらいいでしょうか？',
+          options: [
+            'しっかり換気が2回できるまで頑張って何度でも続ける',
+            '失敗した場合は合計3回まで換気しても良い',
+            '失敗してもとりあえず2回押したら終了して胸骨圧迫を再開する'
+          ],
+          correctAnswer: 2,
+          explanation: '大切なのは胸骨圧迫です。胸骨圧迫の中断時間を最小限にすることが重要です。換気ができていてもできていなくても2回押したら胸骨圧迫を再開します。'
+        },
+        {
+          question: 'バックバルブマスクを押す強さはどちらでしょうか？',
+          options: [
+            '押せるだけ目いっぱい押す',
+            '胸が上がる程度で良い'
+          ],
+          correctAnswer: 1,
+          explanation: '押しすぎ注意です。胸が上がる程度がベストです。一気に圧を加えると食道に空気が入ってしまいます。'
+        },
+        {
+          question: 'AEDのパッドを張るときに正しいのはどちらでしょうか？',
+          options: [
+            'パッドを張るのを邪魔しないように一旦胸骨圧迫を中断してから張る',
+            '胸骨圧迫は中断せずに合間を縫ってパッドを張る'
+          ],
+          correctAnswer: 1,
+          explanation: '胸骨圧迫の中断は最小限にします。合間を縫ってパッドを張ります。心臓を挟むような位置で貼りましょう。'
+        },
+        {
+          question: '除細動の後の胸骨圧迫のタイミングはどちらでしょうか？',
+          options: [
+            'AEDの胸骨圧迫再開の指示をきちんと聞き終わってから胸骨圧迫を再開する',
+            '除細動が終わったらAEDの指示を待たずに胸骨圧迫を再開して良い'
+          ],
+          correctAnswer: 1,
+          explanation: '大切なことなので何度でも言います。胸骨圧迫の中断は最小限です。'
+        }
+      ];
+
+      // ローカルストレージからデータ読み込み
+      useEffect(() => {
+        const savedResults = localStorage.getItem('blsQuizResults');
+        if (savedResults) {
+          setAllResults(JSON.parse(savedResults));
+        }
+      }, []);
+
+      // 回答を記録する関数
+      const handleAnswer = (selectedOption) => {
+        const currentQuestion = quizData[currentQuestionIndex];
+        let isCorrect = false;
+        
+        // 複数選択問題の処理
+        if (Array.isArray(currentQuestion.correctAnswer)) {
+          if (Array.isArray(selectedOption)) {
+            // 選択肢が配列の場合は、配列同士を比較
+            isCorrect = 
+              selectedOption.length === currentQuestion.correctAnswer.length && 
+              selectedOption.every(option => currentQuestion.correctAnswer.includes(option));
+          }
+        } else {
+          // 単一選択問題の処理
+          isCorrect = selectedOption === currentQuestion.correctAnswer;
+        }
+        
+        // 回答を保存
+        const newAnswers = [...answers];
+        newAnswers[currentQuestionIndex] = {
+          questionIndex: currentQuestionIndex,
+          selectedOption,
+          isCorrect
+        };
+        setAnswers(newAnswers);
+        
+        // 正解の場合、スコアを増やす
+        if (isCorrect) {
+          setScore(score + 1);
+        }
+        
+        // アラートに解説を表示
+        setAlertMessage({
+          title: isCorrect ? '正解！' : '不正解',
+          message: currentQuestion.explanation
+        });
+        setShowAlert(true);
+      };
+
+      // 次の問題へ進む
+      const goToNextQuestion = () => {
+        setShowAlert(false);
+        if (currentQuestionIndex < quizData.length - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+        } else {
+          // クイズ終了
+          const result = {
+            name: userName,
+            score: score,
+            date: new Date().toLocaleString()
+          };
+          
+          // 結果を保存
+          const updatedResults = [...allResults, result];
+          setAllResults(updatedResults);
+          localStorage.setItem('blsQuizResults', JSON.stringify(updatedResults));
+          
+          // 結果画面へ
+          setCurrentScreen('result');
+        }
+      };
+
+      // クイズを初めからやり直す
+      const restartQuiz = () => {
+        setCurrentQuestionIndex(0);
+        setScore(0);
+        setAnswers([]);
+        setCurrentScreen('quiz');
+      };
+
+      // スタート画面へ戻る
+      const goToStart = () => {
+        setUserName('');
+        setCurrentQuestionIndex(0);
+        setScore(0);
+        setAnswers([]);
+        setCurrentScreen('start');
+      };
+
+      // 全ユーザーの結果をクリア
+      const clearAllResults = () => {
+        setAllResults([]);
+        localStorage.removeItem('blsQuizResults');
+      };
+
+      // 複数選択問題の選択肢管理用
+      const [multipleSelections, setMultipleSelections] = useState([]);
+      
+      // 複数選択問題の処理
+      const toggleMultipleSelection = (optionIndex) => {
+        let selections = [...multipleSelections];
+        const index = selections.indexOf(optionIndex);
+        
+        if (index === -1) {
+          selections.push(optionIndex);
+        } else {
+          selections.splice(index, 1);
+        }
+        
+        setMultipleSelections(selections);
+      };
+      
+      // 複数選択問題の確定
+      const submitMultipleSelections = () => {
+        if (multipleSelections.length > 0) {
+          handleAnswer(multipleSelections);
+          setMultipleSelections([]);
+        }
+      };
+
+      // 現在の問題
+      const currentQuestion = quizData[currentQuestionIndex];
+      
+      // 多選択問題かどうか
+      const isMultipleChoice = currentQuestion && Array.isArray(currentQuestion.correctAnswer);
+
+      // Alert コンポーネント
+      const Alert = ({ title, message, onClose }) => (
+        <div className="alert-overlay">
+          <div className="alert-content">
+            <div className="mb-4">
+              <h3 className="text-lg font-medium">{title}</h3>
+              <p className="mt-2 text-sm text-gray-500">{message}</p>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                次へ進む
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
+          {/* スタート画面 */}
+          {currentScreen === 'start' && (
+            <div className="card w-full max-w-lg">
+              <div className="bg-blue-500 text-white p-4 rounded-t-lg">
+                <h2 className="text-2xl font-bold text-center">BLS（一次救命処置）クイズ</h2>
+              </div>
+              <div className="p-6">
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-2">お名前を入力してください：</label>
+                  <input
+                    type="text"
+                    value={userName}
+                    onChange={(e) => setUserName(e.target.value)}
+                    className="w-full p-2 border rounded"
+                    placeholder="氏名"
+                  />
+                </div>
+                <p className="text-gray-600 text-sm mb-4">
+                  ※このクイズは全8問です。正解すると1点が加算されます。
+                </p>
+              </div>
+              <div className="flex justify-between p-4 border-t">
+                <button
+                  onClick={() => setCurrentScreen('results')}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                >
+                  全員の結果を見る
+                </button>
+                <button
+                  onClick={() => setCurrentScreen('quiz')}
+                  disabled={!userName}
+                  className={`px-4 py-2 rounded ${
+                    userName ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-gray-200 text-gray-400'
+                  }`}
+                >
+                  クイズを始める
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* クイズ画面 */}
+          {currentScreen === 'quiz' && currentQuestion && (
+            <div className="card w-full max-w-lg">
+              <div className="bg-blue-500 text-white p-4 rounded-t-lg">
+                <h2 className="text-xl">問題 {currentQuestionIndex + 1}/{quizData.length}</h2>
+              </div>
+              <div className="p-6">
+                <div className="mb-6">
+                  <p className="text-lg font-medium mb-4">{currentQuestion.question}</p>
+                  <div className="space-y-2">
+                    {currentQuestion.options.map((option, index) => (
+                      <div
+                        key={index}
+                        className={`p-3 border rounded cursor-pointer ${
+                          isMultipleChoice
+                            ? multipleSelections.includes(index)
+                              ? 'bg-blue-100 border-blue-500'
+                              : 'hover:bg-gray-50'
+                            : 'hover:bg-gray-50'
+                        }`}
+                        onClick={() => {
+                          if (isMultipleChoice) {
+                            toggleMultipleSelection(index);
+                          } else {
+                            handleAnswer(index);
+                          }
+                        }}
+                      >
+                        <div className="flex items-center">
+                          {isMultipleChoice ? (
+                            <input
+                              type="checkbox"
+                              checked={multipleSelections.includes(index)}
+                              onChange={() => toggleMultipleSelection(index)}
+                              className="mr-2"
+                            />
+                          ) : (
+                            <div className="w-6 h-6 flex items-center justify-center mr-2 rounded-full border border-gray-300">
+                              {index}
+                            </div>
+                          )}
+                          <span>{option}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {isMultipleChoice && (
+                <div className="p-4 border-t">
+                  <button
+                    onClick={submitMultipleSelections}
+                    disabled={multipleSelections.length === 0}
+                    className={`px-4 py-2 rounded w-full ${
+                      multipleSelections.length > 0 ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-gray-200 text-gray-400'
+                    }`}
+                  >
+                    回答する
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 結果画面 */}
+          {currentScreen === 'result' && (
+            <div className="card w-full max-w-lg">
+              <div className="bg-blue-500 text-white p-4 rounded-t-lg text-center">
+                <h2 className="text-2xl">クイズ結果</h2>
+              </div>
+              <div className="p-6">
+                <div className="text-center mb-6">
+                  <h3 className="text-xl font-bold mb-2">{userName}さんの結果</h3>
+                  <p className="text-3xl font-bold">{score} / {quizData.length}点</p>
+                  <p className="mt-2 text-gray-600">
+                    {score === quizData.length
+                      ? '完璧です！素晴らしい知識をお持ちですね！'
+                      : score >= quizData.length * 0.8
+                      ? '優秀です！少しの復習で完璧になりますよ。'
+                      : score >= quizData.length * 0.6
+                      ? '良い結果です。もう少し復習しましょう。'
+                      : 'もう一度挑戦してみましょう。BLSは反復練習が大切です。'}
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  {answers.map((answer, index) => (
+                    <div
+                      key={index}
+                      className={`p-3 border rounded ${
+                        answer.isCorrect ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'
+                      }`}
+                    >
+                      <p className="font-medium">問題 {index + 1}: {answer.isCorrect ? '正解' : '不正解'}</p>
+                      <p className="text-sm text-gray-600">{quizData[index].explanation}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-between p-4 border-t">
+                <button
+                  onClick={goToStart}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                >
+                  トップに戻る
+                </button>
+                <button
+                  onClick={restartQuiz}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                  再挑戦する
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 全員の結果画面 */}
+          {currentScreen === 'results' && (
+            <div className="card w-full max-w-4xl">
+              <div className="bg-blue-500 text-white p-4 rounded-t-lg">
+                <h2 className="text-2xl">全員の結果</h2>
+              </div>
+              <div className="p-6">
+                {allResults.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="px-4 py-2 text-left">名前</th>
+                          <th className="px-4 py-2 text-center">スコア</th>
+                          <th className="px-4 py-2 text-right">日時</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allResults
+                          .sort((a, b) => b.score - a.score)
+                          .map((result, index) => (
+                            <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              <td className="px-4 py-2">{result.name}</td>
+                              <td className="px-4 py-2 text-center">{result.score} / {quizData.length}</td>
+                              <td className="px-4 py-2 text-right text-sm text-gray-600">{result.date}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-center py-4">まだ結果がありません</p>
+                )}
+              </div>
+              <div className="flex justify-between p-4 border-t">
+                <button
+                  onClick={goToStart}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                >
+                  トップに戻る
+                </button>
+                {allResults.length > 0 && (
+                  <button
+                    onClick={clearAllResults}
+                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                  >
+                    全ての結果をクリア
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* アラートダイアログ */}
+          {showAlert && (
+            <Alert
+              title={alertMessage.title}
+              message={alertMessage.message}
+              onClose={goToNextQuestion}
+            />
+          )}
+        </div>
+      );
+    };
+
+    // アプリをレンダリング
+    ReactDOM.render(<BLSQuizApp />, document.getElementById('root'));
+  </script>
+</body>
+</html>
